@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	str "strings"
 )
 
@@ -33,23 +31,51 @@ func ParseURL(url string) string {
 	} else if str.Contains(url, "z0r.de") {
 		fmt.Println("> z0r")
 
+		// Add ?flash if it's not already there
+		if !str.Contains(url, "?flash") {
+			url = url + "?flash"
+		}
+
 		// Get html from the page
 		resp, err := http.Get(url)
-
 		if err != nil {
 			panic(err)
 		}
 		defer resp.Body.Close()
 
-		source, _ := ioutil.ReadAll(resp.Body)
-		html := string(source[:])
+		html, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Error reading HTML of the page: %v", err)
+			return ""
+		}
+		htmlStr := string(html)
 
-		// Filter html to get swf link
-		index := str.Index(html, "swfobject.embedSWF")
-		dirtyURL := html[index+20 : 1000]
-		end := str.Index(dirtyURL, "\"")
+		// Extracting src from the embed tag
+		embedStart := str.Index(htmlStr, "<embed")
+		if embedStart == -1 {
+			return ""
+		}
 
-		fileURL = dirtyURL[:end]
+		embedPart := htmlStr[embedStart:]
+
+		srcStart := str.Index(embedPart, `src="`)
+		if srcStart == -1 {
+			return ""
+		}
+
+		srcValue := embedPart[srcStart+5:]
+
+		srcEnd := str.Index(srcValue, `"`)
+		if srcEnd == -1 {
+			return ""
+		}
+
+		fileURL = srcValue[:srcEnd]
+
+		// Convert relative path to absolute
+		if str.HasPrefix(fileURL, "../L/") {
+			fileURL = "https://z0r.de/L/" + fileURL[5:]
+		}
 	} else {
 		fmt.Println("Nothing to download...")
 	}
@@ -91,7 +117,19 @@ func main() {
 		fileURL = ParseURL(url)
 
 		if fileURL != "" {
-			err := DownloadFile("\\Downloads\\"+filepath.Base(fileURL), fileURL)
+			// Extract the filename from the URL
+			fileName := fileURL
+			lastSlash := str.LastIndex(fileName, "/")
+			if lastSlash != -1 {
+				fileName = fileName[lastSlash+1:]
+			}
+
+			// Sanitize the filename from invalid characters
+			for _, char := range []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"} {
+				fileName = str.ReplaceAll(fileName, char, "_")
+			}
+
+			err := DownloadFile(fileName, fileURL)
 
 			if err != nil {
 				panic(err)
