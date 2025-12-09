@@ -5,7 +5,7 @@ A lightweight, extensible command-line downloader written in Go for grabbing dir
 ## Installation
 
 ```sh
-go install github.com/valsaven/gimme@latest
+go install github.com/valsaven/gimme@master
 ```
 
 Or clone and build manually:
